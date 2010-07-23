@@ -21,8 +21,7 @@ Now the driver has some limitation, such as not supporting some data types and s
 3. Compilation
 --------------
 1. Download InstantClient and InstantClient-SDK from Oracle site
-1. Unzip it to /usr/lib/oci for the shared libraries and to /usr/include/oci for the header files
-1. Update your /etc/ld.so.conf with adding /usr/lib/oci to the linker path
+1. Unzip it to /usr/lib/ for the shared libraries and to /usr/include/ for the header files
 1. Run ldconfig
 1. Go to the netspire-oracle folder and perform make
 1. Sources will be compiled without errors/warnings and netspire_oracle_drv.so will be copied to ../netspire-core/priv/lib folder.  
