@@ -393,17 +393,6 @@ static int create_connection(CONST OraText *username,
 {
     sb4 lstat = 0;
 
-    /* Initialize oracle handlers */
-    OCIEnvCreate((OCIEnv **) &envhp, (ub4) OCI_DEFAULT,
-                  (dvoid *) 0, (dvoid * (*)(dvoid *,size_t)) 0,
-                  (dvoid * (*)(dvoid *, dvoid *, size_t)) 0,
-                  (void (*)(dvoid *, dvoid *)) 0, (size_t) 0, (dvoid **) 0);
-
-    OCIHandleAlloc((dvoid *) envhp, (dvoid **) &errhp, OCI_HTYPE_ERROR,
-            (size_t) 0, (dvoid **) 0);
-    OCIHandleAlloc((dvoid *) envhp, (dvoid **) &svchp, OCI_HTYPE_SVCCTX,
-            (size_t) 0, (dvoid **) 0);
-
     lstat = OCILogon2(envhp, errhp, &svchp,
             username, (ub4)strlen((char *)username),
             password, (ub4)strlen((char *)password),
