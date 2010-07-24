@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-I/usr/lib/erlang/usr/include -fpic -shared
+CFLAGS=-Wunused -I/usr/lib/erlang/usr/include -fpic -shared
 LDFLAGS=-lpthread -locci -lclntsh -lnnz11
 
 all: compile

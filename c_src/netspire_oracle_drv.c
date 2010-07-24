@@ -46,6 +46,8 @@ static int create_connection(CONST OraText *username,
                                   CONST OraText *password,
                                   CONST OraText *database);
 static int destroy_connection(void);
+static ERL_NIF_TERM perform_non_select_query(ErlNifEnv *env, OCIStmt *stmthp);
+static ERL_NIF_TERM perform_select_query(ErlNifEnv *env, OCIStmt *stmthp);
 static void cleanups(void);
 
 static ERL_NIF_TERM check_error(ErlNifEnv *env, sb4 status);
@@ -144,15 +146,12 @@ ora_connect(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 }
 
 static ERL_NIF_TERM
-ora_query(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+perform_select_query(ErlNifEnv *env, OCIStmt *stmthp)
 {
-
-    ErlNifBinary bin_query;
     ERL_NIF_TERM ret;
     ERL_NIF_TERM *columns = NULL;
-    OCIStmt *stmthp = (OCIStmt *)0;
-    
     OCIParam *mypard = (OCIParam *)0;
+
     ub2 dtype, dsize;
     text *col_name = 0;
     ub4 counter = 1, col_name_len, char_semantics;
@@ -162,33 +161,13 @@ ora_query(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     sb4 lstat = 0, parm_status;
 
     OCIDefine *define = NULL;
+
     char *data[100]; /* XXX: NEED TO FIX */
 
     int i, rownum = 0;
     ERL_NIF_TERM *row = NULL, *rows = NULL;
 
-    if (!enif_inspect_iolist_as_binary(env, argv[0], &bin_query))
-        return enif_make_badarg(env);
-
-    char *query = (char *)malloc(sizeof(char *) * bin_query.size + 1);
-
-    enif_get_string(env, argv[0], query, bin_query.size + 1, ERL_NIF_LATIN1);
-
-    query[bin_query.size] = '\0';
-
-    lstat = OCIHandleAlloc(envhp, (dvoid **)&stmthp,
-            OCI_HTYPE_STMT, (size_t) 0, (dvoid **) 0);
-
-    if (lstat) return check_error(env, lstat);
-
-    lstat = OCIStmtPrepare(stmthp, errhp, (OraText *)query,
-            (ub4)strlen((const signed char *)query), OCI_NTV_SYNTAX,
-            OCI_DEFAULT);
-
-    if (lstat) return check_error(env, lstat);
-    
-    free((char *)query);
-
+    /* execute statetment */
     lstat = OCIStmtExecute(svchp, stmthp, errhp, 0, 0,
                 (OCISnapshot *) 0, (OCISnapshot *) 0, OCI_DEFAULT);
 
@@ -279,13 +258,6 @@ ora_query(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
                 case SQLT_NUM:
                     row[i] = enif_make_int(env, atoi(data[i]));
                     break;
-/*                case SQLT_DAT:
-                    lstat = OCIDateTimeToText((dvoid *)envhp, errhp,
-                            (OCIDateTime *)data[i], (text *)NULL, (ub1) 0, 
-                            (ub2) 2, (text *)NULL, (ub4) 0, (ub4 *)16, buf);
-                    if (lstat) return check_error(env, lstat);
-                    row[i] = enif_make_string(env, buf, ERL_NIF_LATIN1);
-*/
                 default:
                     row[i] = atom_ok;
                     break;
@@ -311,9 +283,80 @@ ora_query(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
             enif_make_tuple_from_array(env, col_names, counter - 1),
             enif_make_list_from_array(env, rows, rownum));
 
-    OCIHandleFree((dvoid *)stmthp, OCI_HTYPE_STMT);
     free((ERL_NIF_TERM *)columns);
     free((ERL_NIF_TERM *)rows);
+
+    return ret;
+}
+
+static ERL_NIF_TERM
+perform_non_select_query(ErlNifEnv *env, OCIStmt *stmthp)
+{
+    sb4 lstat = 0;
+
+    /* execute statetment */
+    lstat = OCIStmtExecute(svchp, stmthp, errhp, 1, 0,
+                (OCISnapshot *) 0, (OCISnapshot *) 0, OCI_COMMIT_ON_SUCCESS);
+
+    if (lstat) return check_error(env, lstat);
+
+    return enif_make_int(env, lstat);
+
+}
+
+static ERL_NIF_TERM
+ora_query(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    ERL_NIF_TERM ret;
+    ErlNifBinary bin_query;
+    OCIStmt *stmthp = (OCIStmt *)0;
+
+    ub4 query_type = 0;
+    sb4 lstat = 0;
+
+    if (!enif_inspect_iolist_as_binary(env, argv[0], &bin_query))
+        return enif_make_badarg(env);
+
+    char *query = (char *)malloc(sizeof(char *) * bin_query.size + 1);
+
+    enif_get_string(env, argv[0], query, bin_query.size + 1, ERL_NIF_LATIN1);
+
+    query[bin_query.size] = '\0';
+
+    lstat = OCIHandleAlloc(envhp, (dvoid **)&stmthp,
+            OCI_HTYPE_STMT, (size_t) 0, (dvoid **) 0);
+
+    if (lstat) return check_error(env, lstat);
+
+    lstat = OCIStmtPrepare(stmthp, errhp, (OraText *)query,
+            (ub4)strlen((const signed char *)query), OCI_NTV_SYNTAX,
+            OCI_DEFAULT);
+
+    if (lstat) return check_error(env, lstat);
+
+    free((char *)query);
+
+    lstat = OCIAttrGet((dvoid *) stmthp, (ub4) OCI_HTYPE_STMT,
+            (dvoid **) &query_type, (ub4 *) 0, (ub4) OCI_ATTR_STMT_TYPE,
+            (OCIError *) errhp);
+
+    if (lstat) return check_error(env, lstat);
+
+    switch(query_type)
+    {
+        case OCI_STMT_SELECT:
+            ret = perform_select_query(env, stmthp);
+            break;
+        case OCI_STMT_INSERT:
+        case OCI_STMT_UPDATE:
+        case OCI_STMT_DELETE:
+            ret = perform_non_select_query(env, stmthp);
+            break;
+        default:
+            ret = enif_make_atom(env, "unsupported_query_type");
+            break;
+    }
+    OCIHandleFree((dvoid *)stmthp, OCI_HTYPE_STMT);
 
     return ret;
 }
